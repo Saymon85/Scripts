@@ -1,0 +1,83 @@
+---
+
+  - hosts: tproxy
+    become: yes
+    tasks:
+      - name: disable firewall
+        shell: systemctl disable firewalld
+
+      - name: install epel-releae
+        yum: name="epel-release" state="latest"
+      
+      - name: install dependcies
+        yum: name="{{ item }}" state="present"
+        with_items: 
+         - net-snmp 
+         - net-snmp-utils
+         - wget
+         - iptables-services 
+         - python
+         - httpd
+         - perl
+         - monitorix
+         - htop
+         
+      - name: copy sysctl file 
+        copy: src="/squid/sysctl.conf" dest="/etc/"       
+      
+      - name: config iptables
+        shell: "{{ item }}" 
+        with_items: 
+         - iptables -t nat -A PREROUTING -i ens192 -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 3129
+         - iptables -t nat -A PREROUTING -i ens192 -p tcp -m tcp --dport 8080 -j REDIRECT --to-ports 3129
+         - iptables -t nat -A PREROUTING -i ens192 -p tcp -m tcp --dport 443 -j REDIRECT --to-ports 3130
+         - service iptables save
+      
+      - name: install squid
+        yum: name="squid" state="present"
+      
+      - name: copy squid conf
+        copy: src="/squid/squid.conf" dest="/etc/squid/"
+      
+      - name: copy scripts to remote server
+        copy: src="/squid/scripts" dest="/"  
+      
+      - name: install ufdb
+        shell: "{{ item }}"
+        with_items:
+         - mkdir /ufdb
+         - wget https://www.urlfilterdb.com/files/downloads/ufdbGuard-1.33.8-CentOS7.x86_64.rpm 
+         - yum install -y ufdbGuard-1.33.8-CentOS7.x86_64.rpm
+         - wget http://www.shallalist.de/Downloads/shallalist.tar.gz
+         - tar -zxf shallalist.tar.gz 
+         - cp -r BL/* /var/ufdbguard/blacklists/
+         - /usr/sbin/ufdbConvertDB /var/ufdbguard/blacklists/
+         - chmod -R 777 /var/ufdbguard/
+         - chmod -R 775 /usr/share/squid/
+         - chmod -R 775 /scripts/*
+         - cp /usr/lib64/squid/cachemgr.cgi /var/www/cgi-bin/  
+
+      - name: copy conf ufdb
+        copy: src="/squid/ufdbGuard.conf" dest="/etc/ufdbguard/"
+      
+      - name: copy snmp conf
+        copy: src="/squid/snmpd.conf" dest="/etc/snmp/"
+
+      - name: copy ssl certs to remote server
+        copy: src="/squid/ssl_certs" dest="/etc/squid"
+      
+      - name: copy netstat script to remote server
+        copy: src="/squid/netstat.py" dest="/usr/local/bin/"
+      
+      - name: copy netstat to cron
+        copy: src="/squid/netstat" dest="/etc/cron.d/"  
+    
+      - name: enable service 
+        service: name="{{ item }}" enabled="yes" state="started"
+        with_items:
+         - squid
+         - ufdb
+         - httpd
+         - snmpd
+         - iptables
+         - monitorix 
