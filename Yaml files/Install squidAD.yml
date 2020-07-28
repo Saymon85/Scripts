@@ -1,0 +1,67 @@
+---
+
+- hosts: 10.184.25.72
+    tasks:
+      - name: disable firewall
+        shell: systemctl disable firewalld
+
+      - name: install epel-releae
+        yum: name="epel-release" state="latest"
+
+      - name: Install-dependencies
+        become: yes
+        shell: item
+        with_items:
+          - net-snmp 
+          - net-snmp-utils
+          - wget
+          - iptables-services 
+          - python
+          - httpd
+          - perl
+          - monitorix
+          - htop
+          - samba-winbind 
+          - samba-winbind-clients 
+          - pam_krb5 
+          - krb5-workstation 
+          - ntp 
+          - ntpdate
+          - openldap-clients
+
+      - name: copy sysctl file 
+        copy: src="/squid/sysctl.conf" dest="/etc/"
+      
+      - name: conf ntp
+        shell: ntpdate 10.184.25.50
+
+      - name: enable service 
+        service: name=ntpd enabled="yes" state="started"  
+      - name: autokonfiguracija
+        shell: authconfig --enablekrb5 --krb5kdc=joe.pravda.gov.rs --krb5adminserver=joe.pravda.gov.rs --krb5realm=PRAVDA.GOV.RS --enablewinbind --enablewinbindauth --smbsecurity=ads --smbrealm=PRAVDA.GOV.RS --smbservers=pravda.gov.rs --smbworkgroup=PRAVDA --winbindtemplatehomedir=/home/%U --winbindtemplateshell=/bin/bash --enablemkhomedir --enablewinbindusedefaultdomain --update  
+      - name: install squid
+        yum: name="squid" state="present"
+      
+      - name: install squid
+        yum: name="squid" state="present"    
+
+      - name: copy squid conf
+        copy: src="/squid/squid.conf" dest="/etc/squid/"
+      
+      - name: copy scripts to remote server
+        copy: src="/squid/scripts" dest="/"
+
+      - name: install ufdb
+        shell: "{{ item }}"
+        with_items:
+         - mkdir /ufdb
+         - wget https://www.urlfilterdb.com/files/downloads/ufdbGuard-1.33.8-CentOS7.x86_64.rpm 
+         - yum install -y ufdbGuard-1.33.8-CentOS7.x86_64.rpm
+         - wget http://www.shallalist.de/Downloads/shallalist.tar.gz
+         - tar -zxf shallalist.tar.gz 
+         - cp -r BL/* /var/ufdbguard/blacklists/
+         - /usr/sbin/ufdbConvertDB /var/ufdbguard/blacklists/
+         - chmod -R 777 /var/ufdbguard/
+         - chmod -R 775 /usr/share/squid/
+         - chmod -R 775 /scripts/*
+         - cp /usr/lib64/squid/cachemgr.cgi /var/www/cgi-bin/          
